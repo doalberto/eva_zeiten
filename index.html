@@ -69,8 +69,16 @@
     transition: border-color 0.2s;
   }
   .input-row input:focus { border-color: #f87171; }
-  .input-row .unit { color: #a08080; font-size: 0.85rem; width: 30px; }
+  .input-row .unit { color: #a08080; font-size: 0.85rem; width: 55px; }
   .separator { margin: 1rem 0; border-top: 1px solid #3d1c1c; }
+  .or-divider {
+    text-align: center;
+    color: #6b4040;
+    font-size: 0.8rem;
+    margin: 0.5rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
   table {
     width: 100%;
     border-collapse: separate;
@@ -136,6 +144,12 @@
     <input type="number" id="timeInput" step="any" placeholder="z.B. 60">
     <span class="unit">s</span>
   </div>
+  <div class="or-divider">– oder –</div>
+  <div class="input-row">
+    <label>Pace</label>
+    <input type="text" id="paceInput" placeholder="z.B. 3:38">
+    <span class="unit">min/km</span>
+  </div>
 
   <div class="separator"></div>
 
@@ -148,15 +162,18 @@
 
 <script>
   let mode = '15x1';
+  let lastInput = 'disttime'; // 'disttime' or 'pace'
 
   const modeBtns = document.querySelectorAll('.mode-btn');
   const distInput = document.getElementById('distInput');
   const timeInput = document.getElementById('timeInput');
+  const paceInput = document.getElementById('paceInput');
   const results = document.getElementById('results');
   const info = document.getElementById('info');
 
   distInput.value = '275';
   timeInput.value = '60';
+  syncPaceFromDistTime();
 
   modeBtns.forEach(btn => btn.addEventListener('click', () => {
     modeBtns.forEach(b => b.classList.remove('active'));
@@ -165,8 +182,41 @@
     calculate();
   }));
 
-  distInput.addEventListener('input', calculate);
-  timeInput.addEventListener('input', calculate);
+  distInput.addEventListener('input', () => { lastInput = 'disttime'; syncPaceFromDistTime(); calculate(); });
+  timeInput.addEventListener('input', () => { lastInput = 'disttime'; syncPaceFromDistTime(); calculate(); });
+  paceInput.addEventListener('input', () => { lastInput = 'pace'; syncDistTimeFromPace(); calculate(); });
+
+  function syncPaceFromDistTime() {
+    const d = parseFloat(distInput.value);
+    const t = parseFloat(timeInput.value);
+    if (!isNaN(d) && !isNaN(t) && d > 0 && t > 0) {
+      const paceSeconds = (t / d) * 1000;
+      const pm = Math.floor(paceSeconds / 60);
+      const ps = paceSeconds - pm * 60;
+      paceInput.value = pm + ':' + ps.toFixed(0).padStart(2, '0');
+    }
+  }
+
+  function parsePace(val) {
+    if (typeof val === 'string' && val.includes(':')) {
+      const parts = val.split(':');
+      return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+    }
+    return parseFloat(val) * 60; // treat plain number as minutes
+  }
+
+  function syncDistTimeFromPace() {
+    const paceStr = paceInput.value;
+    const paceSec = parsePace(paceStr);
+    if (!isNaN(paceSec) && paceSec > 0) {
+      // keep distInput as-is if filled, recalculate time; otherwise use default
+      const d = parseFloat(distInput.value);
+      if (!isNaN(d) && d > 0) {
+        const t = (paceSec / 1000) * d;
+        timeInput.value = t.toFixed(1);
+      }
+    }
+  }
 
   function formatTime15(seconds) {
     const rounded = Math.round(seconds * 10) / 10;
@@ -196,13 +246,19 @@
   }
 
   function calculate() {
-    const dist = parseFloat(distInput.value);
-    const time = parseFloat(timeInput.value);
+    let secPerMeter;
+    if (lastInput === 'pace') {
+      const paceSec = parsePace(paceInput.value);
+      if (isNaN(paceSec) || paceSec <= 0) { results.innerHTML = ''; info.textContent = ''; return; }
+      secPerMeter = paceSec / 1000;
+    } else {
+      const dist = parseFloat(distInput.value);
+      const time = parseFloat(timeInput.value);
+      if (isNaN(dist) || isNaN(time) || dist <= 0 || time <= 0) { results.innerHTML = ''; info.textContent = ''; return; }
+      secPerMeter = time / dist;
+    }
     results.innerHTML = '';
     info.textContent = '';
-    if (isNaN(dist) || isNaN(time) || dist <= 0 || time <= 0) return;
-
-    const secPerMeter = time / dist;
 
     if (mode === '15x1') {
       const maxTime = 60;
