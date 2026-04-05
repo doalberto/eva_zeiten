@@ -255,8 +255,12 @@
   function syncDistTimeFromPace() {
     const spm = getSecPerMeterFromPaceField();
     if (spm && spm > 0) {
-      distInput.value = '10';
-      const t = spm * 10;
+      let d = parseFloat(distInput.value);
+      if (isNaN(d) || d <= 0) {
+        d = 10;
+        distInput.value = '10';
+      }
+      const t = spm * d;
       timeInput.value = t.toFixed(1);
     }
   }
