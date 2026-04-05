@@ -209,12 +209,9 @@
     const paceStr = paceInput.value;
     const paceSec = parsePace(paceStr);
     if (!isNaN(paceSec) && paceSec > 0) {
-      // keep distInput as-is if filled, recalculate time; otherwise use default
-      const d = parseFloat(distInput.value);
-      if (!isNaN(d) && d > 0) {
-        const t = (paceSec / 1000) * d;
-        timeInput.value = t.toFixed(1);
-      }
+      distInput.value = '10';
+      const t = (paceSec / 1000) * 10;
+      timeInput.value = t.toFixed(1);
     }
   }
 
