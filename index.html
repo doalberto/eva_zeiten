@@ -70,6 +70,13 @@
   }
   .input-row input:focus { border-color: #f87171; }
   .input-row .unit { color: #a08080; font-size: 0.85rem; width: 55px; }
+  .input-row label.clickable {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+  }
+  .input-row label.clickable:hover { color: #f87171; }
   .separator { margin: 1rem 0; border-top: 1px solid #3d1c1c; }
   .or-divider {
     text-align: center;
@@ -146,9 +153,9 @@
   </div>
   <div class="or-divider">– oder –</div>
   <div class="input-row">
-    <label>Pace</label>
+    <label id="paceLabel" class="clickable">Pace</label>
     <input type="text" id="paceInput" placeholder="z.B. 3:38">
-    <span class="unit">min/km</span>
+    <span class="unit" id="paceUnit">min/km</span>
   </div>
 
   <div class="separator"></div>
@@ -163,11 +170,14 @@
 <script>
   let mode = '15x1';
   let lastInput = 'disttime'; // 'disttime' or 'pace'
+  let paceMode = 'pace'; // 'pace' or 'kmh'
 
   const modeBtns = document.querySelectorAll('.mode-btn');
   const distInput = document.getElementById('distInput');
   const timeInput = document.getElementById('timeInput');
   const paceInput = document.getElementById('paceInput');
+  const paceLabel = document.getElementById('paceLabel');
+  const paceUnit = document.getElementById('paceUnit');
   const results = document.getElementById('results');
   const info = document.getElementById('info');
 
@@ -182,35 +192,71 @@
     calculate();
   }));
 
+  paceLabel.addEventListener('click', () => {
+    // Convert current value before switching
+    const oldVal = getSecPerMeterFromPaceField();
+    paceMode = paceMode === 'pace' ? 'kmh' : 'pace';
+    paceLabel.textContent = paceMode === 'pace' ? 'Pace' : 'Tempo';
+    paceUnit.textContent = paceMode === 'pace' ? 'min/km' : 'km/h';
+    paceInput.placeholder = paceMode === 'pace' ? 'z.B. 3:38' : 'z.B. 16.5';
+    // Re-sync displayed value
+    if (oldVal && oldVal > 0) {
+      setPaceFieldFromSecPerMeter(oldVal);
+    }
+  });
+
   distInput.addEventListener('input', () => { lastInput = 'disttime'; syncPaceFromDistTime(); calculate(); });
   timeInput.addEventListener('input', () => { lastInput = 'disttime'; syncPaceFromDistTime(); calculate(); });
   paceInput.addEventListener('input', () => { lastInput = 'pace'; syncDistTimeFromPace(); calculate(); });
-
-  function syncPaceFromDistTime() {
-    const d = parseFloat(distInput.value);
-    const t = parseFloat(timeInput.value);
-    if (!isNaN(d) && !isNaN(t) && d > 0 && t > 0) {
-      const paceSeconds = (t / d) * 1000;
-      const pm = Math.floor(paceSeconds / 60);
-      const ps = paceSeconds - pm * 60;
-      paceInput.value = pm + ':' + ps.toFixed(0).padStart(2, '0');
-    }
-  }
 
   function parsePace(val) {
     if (typeof val === 'string' && val.includes(':')) {
       const parts = val.split(':');
       return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
     }
-    return parseFloat(val) * 60; // treat plain number as minutes
+    return parseFloat(val) * 60;
+  }
+
+  // Returns sec/m from paceInput regardless of paceMode
+  function getSecPerMeterFromPaceField() {
+    const raw = paceInput.value;
+    if (paceMode === 'pace') {
+      const paceSec = parsePace(raw);
+      if (isNaN(paceSec) || paceSec <= 0) return null;
+      return paceSec / 1000;
+    } else {
+      const kmh = parseFloat(raw);
+      if (isNaN(kmh) || kmh <= 0) return null;
+      return 3.6 / kmh; // 1 m/s = 3.6 km/h
+    }
+  }
+
+  // Sets paceInput value from sec/m
+  function setPaceFieldFromSecPerMeter(spm) {
+    if (paceMode === 'pace') {
+      const paceSeconds = spm * 1000;
+      const pm = Math.floor(paceSeconds / 60);
+      const ps = paceSeconds - pm * 60;
+      paceInput.value = pm + ':' + ps.toFixed(0).padStart(2, '0');
+    } else {
+      const kmh = 3.6 / spm;
+      paceInput.value = kmh.toFixed(1);
+    }
+  }
+
+  function syncPaceFromDistTime() {
+    const d = parseFloat(distInput.value);
+    const t = parseFloat(timeInput.value);
+    if (!isNaN(d) && !isNaN(t) && d > 0 && t > 0) {
+      setPaceFieldFromSecPerMeter(t / d);
+    }
   }
 
   function syncDistTimeFromPace() {
-    const paceStr = paceInput.value;
-    const paceSec = parsePace(paceStr);
-    if (!isNaN(paceSec) && paceSec > 0) {
+    const spm = getSecPerMeterFromPaceField();
+    if (spm && spm > 0) {
       distInput.value = '10';
-      const t = (paceSec / 1000) * 10;
+      const t = spm * 10;
       timeInput.value = t.toFixed(1);
     }
   }
@@ -245,9 +291,8 @@
   function calculate() {
     let secPerMeter;
     if (lastInput === 'pace') {
-      const paceSec = parsePace(paceInput.value);
-      if (isNaN(paceSec) || paceSec <= 0) { results.innerHTML = ''; info.textContent = ''; return; }
-      secPerMeter = paceSec / 1000;
+      secPerMeter = getSecPerMeterFromPaceField();
+      if (!secPerMeter || secPerMeter <= 0) { results.innerHTML = ''; info.textContent = ''; return; }
     } else {
       const dist = parseFloat(distInput.value);
       const time = parseFloat(timeInput.value);
