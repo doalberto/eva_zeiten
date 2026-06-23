@@ -139,6 +139,20 @@
   <div class="mode-toggle">
     <button class="mode-btn active" data-mode="15x1">15 × 1'</button>
     <button class="mode-btn" data-mode="4x4">4 × 4'</button>
+    <button class="mode-btn" data-mode="custom">Custom</button>
+  </div>
+
+  <div id="customRows" style="display:none;">
+    <div class="input-row">
+      <label>Schritt</label>
+      <input type="number" id="customStep" step="any" value="50">
+      <span class="unit">m</span>
+    </div>
+    <div class="input-row">
+      <label>Intervall</label>
+      <input type="text" id="customInterval" value="1:00">
+      <span class="unit">m:ss</span>
+    </div>
   </div>
 
   <div class="input-row">
@@ -185,12 +199,20 @@
   timeInput.value = '60';
   syncPaceFromDistTime();
 
+  const customRows = document.getElementById('customRows');
+  const customStep = document.getElementById('customStep');
+  const customInterval = document.getElementById('customInterval');
+
   modeBtns.forEach(btn => btn.addEventListener('click', () => {
     modeBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     mode = btn.dataset.mode;
+    customRows.style.display = mode === 'custom' ? 'block' : 'none';
     calculate();
   }));
+
+  customStep.addEventListener('input', calculate);
+  customInterval.addEventListener('input', calculate);
 
   paceLabel.addEventListener('click', () => {
     // Convert current value before switching
@@ -335,7 +357,7 @@
 
       info.textContent = `${maxDist.toFixed(1)}m in 60s`;
 
-    } else {
+    } else if (mode === '4x4') {
       const maxTime = 240;
       const step = 100;
       const rows = [];
@@ -362,6 +384,41 @@
       });
 
       info.textContent = `${maxDist.toFixed(1)}m in 4:00`;
+
+    } else {
+      // Custom mode
+      const step = parseFloat(customStep.value);
+      const maxTime = parsePace(customInterval.value);
+      if (isNaN(step) || step <= 0 || isNaN(maxTime) || maxTime <= 0) {
+        results.innerHTML = ''; info.textContent = ''; return;
+      }
+      const rows = [];
+      const maxRows = 100;
+      for (let d = step, i = 0; i < maxRows; d += step, i++) {
+        const t = d * secPerMeter;
+        if (t > maxTime) break;
+        rows.push({ dist: d, time: t, highlight: false });
+      }
+      const maxDist = maxTime / secPerMeter;
+      const tolerance = maxTime < 90 ? 0.05 : 0.5;
+      const lastRow = rows.length > 0 ? rows[rows.length - 1] : null;
+      if (!lastRow || Math.abs(lastRow.time - maxTime) > tolerance) {
+        rows.push({ dist: Math.round(maxDist), time: maxTime, highlight: true });
+      } else {
+        rows[rows.length - 1].highlight = true;
+      }
+      const useShortFormat = maxTime < 90;
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+        if (r.highlight) tr.classList.add('highlight');
+        const timeStr = useShortFormat ? formatTime15(r.time) : formatTime4x4(r.time);
+        tr.innerHTML = `<td>${r.dist}m</td><td>${timeStr}</td>`;
+        results.appendChild(tr);
+      });
+      const infoTime = useShortFormat
+        ? maxTime.toFixed(1) + 's'
+        : Math.floor(maxTime / 60) + ':' + (maxTime - Math.floor(maxTime / 60) * 60).toFixed(0).padStart(2, '0');
+      info.textContent = `${maxDist.toFixed(1)}m in ${infoTime}`;
     }
   }
 
